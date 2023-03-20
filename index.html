@@ -1,24 +1,28 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>勉強時間記録サイト</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://d3js.org/d3.v6.min.js"></script>
-  </head>
-  <body>
-    <h1>勉強時間記録</h1>
-    <form>
-      <label for="content">勉強内容:</label>
-      <select id="content">
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>勉強時間記録</title>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>勉強時間記録</h1>
+  <form>
+    <label>勉強内容：
+      <select id="study-type">
+        <option value="all">全て</option>
         <option value="video">動画</option>
         <option value="text">テキスト</option>
-        <option value="others">その他</option>
+        <option value="the-others">その他</option>
       </select>
-      <label for="time">勉強時間（分）:</label>
-      <input type="number" id="time" name="time" required>
-      <button type="submit">記録する</button>
-    </form>
-    <div id="graph"></div>
-    <script src="script.js"></script>
-  </body>
+    </label>
+    <br>
+    <label>勉強時間（分）：<input type="number" id="study-time"></label>
+    <br>
+    <button type="button" onclick="record()">記録する</button>
+  </form>
+  <div id="chart"></div>
+  <script src="main.js"></script>
+</body>
 </html>
