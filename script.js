@@ -1,98 +1,72 @@
-// 日ごとの勉強時間を保存する配列
-let studyData = [];
+// グラフの設定
+var margin = { top: 50, right: 50, bottom: 50, left: 50 };
+var width = 800 - margin.left - margin.right;
+var height = 400 - margin.top - margin.bottom;
+var barPadding = 5;
 
-// フォームの送信イベントに対する処理
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault(); // デフォルトの送信処理を中止
+// x軸のスケールを設定
+var xScale = d3.scaleBand()
+  .range([0, width])
+  .padding(0.1);
 
-  // フォームの値を取得
-  const studyType = document.querySelector('input[name="study-type"]:checked').value;
-  const studyTime = document.querySelector('input[name="study-time"]').value;
-  const studyDate = document.querySelector('input[name="study-date"]').value;
+// y軸のスケールを設定
+var yScale = d3.scaleLinear()
+  .range([height, 0]);
 
-  // 日付をキーとしたオブジェクトを作成し、勉強時間を配列に追加
-  const studyObj = {date: studyDate, type: studyType, time: studyTime};
-  studyData.push(studyObj);
+// svg要素を作成
+var svg = d3.select("body")
+  .append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-  // グラフを描画する
-  drawGraph(studyData);
-});
+// CSVファイルからデータを取得し、グラフを描画
+d3.csv("data.csv", function(error, data) {
+  if (error) throw error;
 
-// グラフを描画する関数
-function drawGraph(data) {
-  // グラフの幅、高さ、余白
-  const width = 800;
-  const height = 400;
-  const margin = { top: 20, right: 20, bottom: 30, left: 50 };
+  // データの加工
+  var studyTimeByDate = d3.nest()
+    .key(function(d) { return d.date; })
+    .rollup(function(v) {
+      return {
+        date: v[0].date,
+        video: d3.sum(v, function(d) { return d.video; }),
+        text: d3.sum(v, function(d) { return d.text; }),
+        others: d3.sum(v, function(d) { return d.others; })
+      };
+    })
+    .entries(data);
 
-  // SVG要素を作成
-  const svg = d3.select("svg");
-  svg.selectAll("*").remove(); // 既存の要素を削除
-  svg.attr("width", width).attr("height", height);
+  // x軸、y軸のドメインを設定
+  xScale.domain(studyTimeByDate.map(function(d) { return d.key; }));
+  yScale.domain([0, d3.max(studyTimeByDate, function(d) {
+    return d.value.video + d.value.text + d.value.others;
+  })]);
 
-  // グラフの描画範囲を決定
-  const chart = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
+  // x軸を追加
+  svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(xScale));
 
-  // 日付の範囲を決定
-  const dateExtent = d3.extent(data, d => new Date(d.date)); // 日付の範囲
-  const xScale = d3.scaleTime().domain(dateExtent).range([0, innerWidth]); // 日付をx座標に対応させる
+  // y軸を追加
+  svg.append("g")
+    .attr("class", "y axis")
+    .call(d3.axisLeft(yScale));
 
-  // 勉強時間の範囲を決定
-  const timeExtent = [0, d3.max(data, d => +d.time)]; // 勉強時間の範囲
-  const yScale = d3.scaleLinear().domain(timeExtent).range([innerHeight, 0]); // 勉強時間をy座標に対応させる
-
-  var barWidth = (chartWidth / data.length) * 0.8;
-  var bar = chart.selectAll("g")
-      .data(data)
-      .enter().append("g")
-      .attr("transform", function(d, i) { return "translate(" + i * barWidth + ",0)"; });
-
-  bar.append("rect")
-      .attr("y", function(d) { return chartHeight - y(d.time); })
-      .attr("height", function(d) { return y(d.time); })
-      .attr("width", barWidth - 1)
-      .style("fill", function(d) {
-          switch(d.type) {
-              case "video":
-                  return "red";
-              case "text":
-                  return "blue";
-              case "the others":
-                  return "green";
-          }
-      });
-
-  // Y軸を追加する
-  var yAxis = d3.axisLeft(y);
-  chart.append("g")
-      .attr("class", "y axis")
-      .call(yAxis);
-
-  // X軸を追加する
-  var xAxis = d3.axisBottom(x);
-  chart.append("g")
-      .attr("class", "x axis")
-      .attr("transform", "translate(0," + chartHeight + ")")
-      .call(xAxis);
-
-  // グリッド線を追加する
-  chart.append('g')
-      .attr('class', 'grid')
-      .attr('transform', 'translate(0,' + chartHeight + ')')
-      .call(d3.axisBottom()
-          .scale(x)
-          .tickSize(-chartHeight, 0, 0)
-          .tickFormat('')
-      )
-
-  chart.append('g')
-      .attr('class', 'grid')
-      .call(d3.axisLeft()
-          .scale(y)
-          .tickSize(-chartWidth, 0, 0)
-          .tickFormat('')
-      )
-});
-
+  // 棒グラフを追加
+  svg.selectAll(".bar")
+    .data(studyTimeByDate)
+    .enter()
+    .append("rect")
+    .attr("class", "bar")
+    .attr("x", function(d) { return xScale(d.key); })
+    .attr("width", xScale.bandwidth())
+    .attr("y", function(d) { return yScale(d.value.video + d.value.text + d.value.others); })
+    .attr("height", function(d) { return height - yScale(d.value.video + d.value.text + d.value.others); })
+    .attr("fill", function(d) {
+      if (d.value.video >= d.value.text && d.value.video >= d.value.others) {
+        return "#1f77b4"; // blue
+      } else if (d.value.text >= d.value.video && d.value.text >= d.value.others) {
+        return
