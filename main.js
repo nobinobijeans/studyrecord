@@ -1,72 +1,124 @@
-// グラフの設定
-var margin = { top: 50, right: 50, bottom: 50, left: 50 };
-var width = 800 - margin.left - margin.right;
-var height = 400 - margin.top - margin.bottom;
-var barPadding = 5;
+// 日付のフォーマットを設定
+const formatTime = d3.timeFormat('%Y/%m/%d');
 
-// x軸のスケールを設定
-var xScale = d3.scaleBand()
-  .range([0, width])
-  .padding(0.1);
+// グラフの大きさを設定
+const width = 800;
+const height = 400;
+const margin = {top: 20, right: 20, bottom: 40, left: 50};
+const innerWidth = width - margin.left - margin.right;
+const innerHeight = height - margin.top - margin.bottom;
 
-// y軸のスケールを設定
-var yScale = d3.scaleLinear()
-  .range([height, 0]);
+// SVG要素を作成
+const svg = d3.select('#graph')
+  .append('svg')
+  .attr('width', width)
+  .attr('height', height);
 
-// svg要素を作成
-var svg = d3.select("body")
-  .append("svg")
-  .attr("width", width + margin.left + margin.right)
-  .attr("height", height + margin.top + margin.bottom)
-  .append("g")
-  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+// データを格納する配列を用意
+let studyData = [];
 
-// CSVファイルからデータを取得し、グラフを描画
-d3.csv("data.csv", function(error, data) {
-  if (error) throw error;
+// 「記録する」ボタンがクリックされた時の処理
+function record() {
+  const studyType = document.getElementById('study-type').value;
+  const studyTime = Number(document.getElementById('study-time').value);
 
-  // データの加工
-  var studyTimeByDate = d3.nest()
-    .key(function(d) { return d.date; })
-    .rollup(function(v) {
-      return {
-        date: v[0].date,
-        video: d3.sum(v, function(d) { return d.video; }),
-        text: d3.sum(v, function(d) { return d.text; }),
-        others: d3.sum(v, function(d) { return d.others; })
-      };
-    })
-    .entries(data);
+  if (isNaN(studyTime)) {
+    alert('勉強時間には数値を入力してください');
+    return;
+  }
 
-  // x軸、y軸のドメインを設定
-  xScale.domain(studyTimeByDate.map(function(d) { return d.key; }));
-  yScale.domain([0, d3.max(studyTimeByDate, function(d) {
-    return d.value.video + d.value.text + d.value.others;
-  })]);
+  const today = new Date();
+  const todayStr = formatTime(today);
+  const existingData = studyData.find(data => data.date === todayStr && data.type === studyType);
 
-  // x軸を追加
-  svg.append("g")
-    .attr("class", "x axis")
-    .attr("transform", "translate(0," + height + ")")
-    .call(d3.axisBottom(xScale));
+  if (existingData) {
+    existingData.time += studyTime;
+  } else {
+    studyData.push({
+      date: todayStr,
+      type: studyType,
+      time: studyTime
+    });
+  }
 
-  // y軸を追加
-  svg.append("g")
-    .attr("class", "y axis")
-    .call(d3.axisLeft(yScale));
+  drawGraph(studyData);
+}
 
-  // 棒グラフを追加
-  svg.selectAll(".bar")
-    .data(studyTimeByDate)
-    .enter()
-    .append("rect")
-    .attr("class", "bar")
-    .attr("x", function(d) { return xScale(d.key); })
-    .attr("width", xScale.bandwidth())
-    .attr("y", function(d) { return yScale(d.value.video + d.value.text + d.value.others); })
-    .attr("height", function(d) { return height - yScale(d.value.video + d.value.text + d.value.others); })
-    .attr("fill", function(d) {
-      if (d.value.video >= d.value.text && d.value.video >= d.value.others) {
-        return "#1f77b4"; // blue
-      } else if (d.value.text >= d.value.video && d.value.text >= d.value.others) {
-        return
+// グラフを描画する関数
+function drawGraph(data) {
+  // 日付の範囲を取得
+  const dateRange = d3.extent(data, d => new Date(d.date));
+
+  // 縦軸のスケールを設定
+  const timeRange = [0, d3.max(data, d => d.time)];
+  const yScale = d3.scaleLinear()
+    .domain(timeRange)
+    .range([innerHeight, 0]);
+
+  // 横軸のスケールを
+  const margin = { top: 20, right: 20, bottom: 70, left: 40 };
+  const width = 600 - margin.left - margin.right;
+  const height = 300 - margin.top - margin.bottom;
+
+  const svg = d3
+    .select("#chart")
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  d3.json("data.json", function (data) {
+    data.forEach(function (d) {
+      d.date = d3.timeParse("%Y-%m-%d")(d.date);
+      d.total = +d.total;
+    });
+
+    const x = d3
+      .scaleBand()
+      .range([0, width])
+      .padding(0.1)
+      .domain(data.map(function (d) { return d.date; }));
+
+    const y = d3.scaleLinear().range([height, 0]).domain([0, 10]);
+
+    const colors = d3.scaleOrdinal()
+      .domain(["video", "text", "the others"])
+      .range(["#98abc5", "#8a89a6", "#7b6888"]);
+
+    const tooltip = d3.select("#chart").append("div").attr("class", "tooltip");
+
+    svg
+      .selectAll(".bar")
+      .data(data)
+      .enter()
+      .append("rect")
+      .attr("class", "bar")
+      .attr("x", function (d) { return x(d.date); })
+      .attr("width", x.bandwidth())
+      .attr("y", function (d) { return y(d.total); })
+      .attr("height", function (d) { return height - y(d.total); })
+      .attr("fill", function(d) { return colors(d.content); })
+      .on("mouseover", function(d) {
+        tooltip
+          .style("opacity", 1)
+          .html("<strong>" + d.date.toLocaleDateString() + "</strong><br/>" + d.content + ": " + d.total + " hours")
+          .style("left", d3.event.pageX + "px")
+          .style("top", d3.event.pageY - 28 + "px");
+      })
+      .on("mouseout", function(d) {
+        tooltip.style("opacity", 0);
+      });
+
+    svg
+      .append("g")
+      .attr("transform", "translate(0," + height + ")")
+      .call(d3.axisBottom(x))
+      .selectAll("text")
+      .style("text-anchor", "end")
+      .attr("transform", "rotate(-45)")
+      .attr("dx", "-.8em")
+      .attr("dy", ".15em");
+
+    svg.append("g").call(d3.axisLeft(y));
+  });
